@@ -63,7 +63,6 @@
 #include <qpa/qplatforminputcontextfactory_p.h>
 
 #include "qeglfscontext.h"
-#include "qeglfspageflipper.h"
 
 #include <EGL/egl.h>
 
@@ -106,16 +105,6 @@ QEglFSIntegration::QEglFSIntegration()
         qWarning("Could not initialize egl display\n");
         qFatal("EGL error");
     }
-
-    int swapInterval = 1;
-    QByteArray swapIntervalString = qgetenv("QT_QPA_EGLFS_SWAPINTERVAL");
-    if (!swapIntervalString.isEmpty()) {
-        bool ok;
-        swapInterval = swapIntervalString.toInt(&ok);
-        if (!ok)
-            swapInterval = 1;
-    }
-    eglSwapInterval(mDisplay, swapInterval);
 
     mScreen = new QEglFSScreen(mHwc, mDisplay);
     screenAdded(mScreen);
@@ -160,7 +149,9 @@ QPlatformBackingStore *QEglFSIntegration::createPlatformBackingStore(QWindow *wi
 
 QPlatformOpenGLContext *QEglFSIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    return new QEglFSContext(mHwc, static_cast<QEglFSPageFlipper *>(mScreen->pageFlipper()), mHwc->surfaceFormatFor(context->format()), context->shareHandle(), mDisplay);
+    QSurfaceFormat adjustedFormat = mHwc->surfaceFormatFor(context->format());
+    EGLConfig config = chooseConfig(mDisplay, adjustedFormat);
+    return new QEglFSContext(mHwc, adjustedFormat, &config, context->shareHandle(), mDisplay);
 }
 
 QPlatformOffscreenSurface *QEglFSIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
@@ -187,6 +178,9 @@ QVariant QEglFSIntegration::styleHint(QPlatformIntegration::StyleHint hint) cons
 {
     if (hint == QPlatformIntegration::ShowIsFullScreen)
         return true;
+    else if (hint == QPlatformIntegration::PasswordMaskDelay)
+        // return time in milliseconds - 1 second
+        return QVariant(1000);
 
     return QPlatformIntegration::styleHint(hint);
 }
